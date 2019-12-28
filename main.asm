@@ -1,7 +1,7 @@
             :BasicUpstart2(main)
             .import source "stdlib.asm"
 
-
+            .const sprite_start = 254
 
 main:
                 jsr setup
@@ -11,7 +11,7 @@ game_loop:
                 rts
 
 
-draw_background:
+enable_hires_mode:
                 hires_mode(1)
                 multicolor_mode(0)
                 // border and bg
@@ -21,40 +21,43 @@ draw_background:
                 set_bank(screen_memory(3), bitmap_memory(1))
                 rts
 
-            .pc = screen_memory(3) "Bitmap"
-                .import binary "bg.scr"
-
-            .pc = bitmap_memory(1) "Bitmap Pixels"
-                // .fill picture.getBitmapSize(), picture.getBitmap(i)
-                .import binary "bg.map"
+draw_background:
+                jsr enable_hires_mode
+                rts
 
 
 setup:
                 jsr draw_background
 
-                // lda #GREY
-                // sta border_color
+                lda #GREY
+                sta border_color
 
-                // lda #%11
-                // sta sprites.enable_bits
+                lda #%11
+                sta sprites.enable_bits
 
-                // ldx #180
-                // stx sprites.positions + 0
-                // stx sprites.positions + 2
-                // ldy #140
-                // sty sprites.positions + 1
-                // sty sprites.positions + 3
-                // lda #BROWN
-                // sta sprites.colors
-                // lda #BLACK
-                // sta sprites.colors + 1
+                ldx #180
+                stx sprites.positions + 0
+                stx sprites.positions + 2
+                ldy #140
+                sty sprites.positions + 1
+                sty sprites.positions + 3
+                lda #BROWN
+                sta sprites.colors
+                lda #BLACK
+                sta sprites.colors + 1
+
+                lda #sprite_start
+                sta sprites.pointers + screen_ram
+                lda #sprite_start + 1
+                sta sprites.pointers + 1 + screen_ram
+
 
                 rts
 
             // .pc = color_ram
             //     .fill picture.getColorRamSize(), picture.getColorRam(i)
 
-            .pc = sprite_memory(0) "Cannon Sprite"
+            .pc = 64 * sprite_start "Cannon Sprite"
             // shadow
             :sprite_row(%000000000000000000000000)
             :sprite_row(%000000000000000000000000)
@@ -114,3 +117,10 @@ setup:
                 .eval value = value >> bits
                 .return value & 255
             }
+
+            .pc = screen_memory(3) "Bitmap"
+                .import binary "bg.scr"
+
+            .pc = bitmap_memory(1) "Bitmap Pixels"
+                // .fill picture.getBitmapSize(), picture.getBitmap(i)
+                .import binary "bg.map"
