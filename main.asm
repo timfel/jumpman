@@ -3,6 +3,7 @@
 
             .const sprite_start = 254
 
+            .pc = * "main"
 main:
                 jsr setup
 game_loop:
@@ -57,7 +58,7 @@ setup:
             // .pc = color_ram
             //     .fill picture.getColorRamSize(), picture.getColorRam(i)
 
-            .pc = 64 * sprite_start "Cannon Sprite"
+            .pc = sprite_memory(sprite_start) "Cannon Sprite"
             // shadow
             :sprite_row(%000000000000000000000000)
             :sprite_row(%000000000000000000000000)
