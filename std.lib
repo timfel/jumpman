@@ -255,6 +255,37 @@
     sta get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index
 }
 
+.macro @enable_sprite(index, flag) {
+    .assert "sprite 0 - 7", index >= 0 && index <= 7, true
+    lda sprites.enable_bits
+    .if (flag) {
+        ora #[1 << index]
+    } else {
+        and #[1 << index] ^ $ff
+    }
+    sta sprites.enable_bits
+}
+
+.macro @set_sprite_color(index, color) {
+    lda #color
+    sta sprites.colors + index
+}
+
+.macro @set_sprite_x(index, x) {
+    lda #x
+    sta sprites.positions + 2 * index
+}
+
+.macro @set_sprite_y(index, y) {
+    lda #y
+    sta sprites.positions + 2 * index + 1
+}
+
+.macro @set_sprite_position(index, x, y) {
+    set_sprite_x(index, x)
+    set_sprite_y(index, y)
+}
+
 .function @get_sprite_memory(vic_bank, index) {
     .assert "max 256 sprites per bank", index >= 0 && index <= 255, true
     .return 64 * index + get_vic_bank(vic_bank)

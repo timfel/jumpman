@@ -40,7 +40,31 @@ setup:{
 
     set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory)
     .segment Sprites
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000111111111100000)
+    :sprite_row(%000000000000000011000000)
+    :sprite_row(%000000000000000110000000)
+    :sprite_row(%000000000000001100000000)
+    :sprite_row(%000000000000011000000000)
+    :sprite_row(%000000000000110000000000)
+    :sprite_row(%000000000001100000000000)
+    :sprite_row(%000000000011000000000000)
+    :sprite_row(%000000000111111111100000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
+    :sprite_row(%000000000000000000000000)
     .segment Code
+    enable_sprite(0, true)
+    set_sprite_color(0, BLACK)
+    set_sprite_position(0, 170, 200)
 
     rts
 }
@@ -52,4 +76,14 @@ gameloop:{
 
 highscore:{
     rts
+}
+
+.macro sprite_row(value) {
+    .byte extract_byte(value, 2), extract_byte(value, 1), extract_byte(value, 0)
+}
+
+.function extract_byte(value, byte_id) {
+    .var bits = byte_id * 8
+    .eval value = value >> bits
+    .return value & 255
 }
