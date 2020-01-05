@@ -2,16 +2,21 @@
 
 .const vic_bank = 3                     // last bank, under kernel and io
 .const bitmap_memory = 1                // upper half of bank
-.const screen_memory = 7                // memory directly in front of bitmap mem
-.const min_sprite_memory = 0            // bitmap and screen is pushed to the end
-.const max_sprite_memory = 112          // after this comes the screen memory
+.const screen_memory = 0                // beginning of bank
+.const min_sprite_memory = 16           // start after screen
+.const max_sprite_memory = 128          // after this comes the bitmap
 
-.file [name="fb.prg", segments="Code,Data,Screen,Bitmap,Sprites"]
+.namespace sprite_images {
+    .label hires_z = 1
+}
+
+.file [name="fb.prg", segments="ExtraMemory,Code,Data,Sprites,Screen,Bitmap"]
+.segmentdef ExtraMemory [start=$0200]   // space between zeropage stack and code
 .segmentdef Code [start=$0801]
 .segmentdef Data [start=$8000]
+.segmentdef Sprites [start=get_sprite_memory(vic_bank, min_sprite_memory)]
 .segmentdef Screen [start=get_screen_memory(vic_bank, screen_memory)]
 .segmentdef Bitmap [start=get_bitmap_memory(vic_bank, bitmap_memory)]
-.segmentdef Sprites [start=get_sprite_memory(vic_bank, min_sprite_memory)]
 
 .segment Code
 BasicUpstart2(main)
@@ -40,6 +45,7 @@ setup:{
 
     set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory)
     .segment Sprites
+    *=get_sprite_memory(vic_bank, min_sprite_memory)
     :sprite_row(%000000000000000000000000)
     :sprite_row(%000000000000000000000000)
     :sprite_row(%000000000000000000000000)
@@ -62,15 +68,17 @@ setup:{
     :sprite_row(%000000000000000000000000)
     :sprite_row(%000000000000000000000000)
     .segment Code
-    enable_sprite(0, true)
-    set_sprite_color(0, BLACK)
     set_sprite_position(0, 170, 200)
+    enable_sprite(0, true)
+    set_sprite_color(0, GREEN)
 
     rts
 }
 
 gameloop:{
-    // jmp gameloop
+    nop
+    nop
+    jmp gameloop
     rts
 }
 

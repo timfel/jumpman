@@ -251,8 +251,16 @@
     .assert "max 256 sprites per bank", memory_index >= 0 && memory_index <= 255, true
     .var memory = 64 * memory_index
     .assert "memory must fit in 16k, because that's all the VIC2 can see", memory < $4000, true
-    lda #memory
+    .assert "sprite cannot overlap screen", memory < get_screen_memory(vic_bank, screen_index) || memory > get_screen_memory(vic_bank, screen_index) + 1024, true
+    lda #memory_index
+    .print toHexString(memory_index)
+    .print toHexString(get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index)
     sta get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index
+}
+
+.macro @enable_sprites(bitmap) {
+    lda #bitmap
+    sta sprites.enable_bits
 }
 
 .macro @enable_sprite(index, flag) {
@@ -264,6 +272,18 @@
         and #[1 << index] ^ $ff
     }
     sta sprites.enable_bits
+}
+
+.macro @set_sprite_colors(bitmap, color) {
+    lda #color
+    .var i = 0
+    .while (bitmap > 0) {
+        .if ((bitmap & 1) == 1) {
+            sta sprites.colors + i
+        }
+        .eval bitmap = bitmap >> 1
+        .eval i++
+    }
 }
 
 .macro @set_sprite_color(index, color) {
@@ -279,6 +299,20 @@
 .macro @set_sprite_y(index, y) {
     lda #y
     sta sprites.positions + 2 * index + 1
+}
+
+.macro @set_sprite_positions(bitmap, x, y) {
+    lda #x
+    ldx #y
+    .var i = 0
+    .while (bitmap > 0) {
+        .if ((bitmap & 1) == 1) {
+            sta sprites.positions + 2 * i
+            stx sprites.positions + 2 * i + 1
+        }
+        .eval bitmap = bitmap >> 1
+        .eval i++
+    }
 }
 
 .macro @set_sprite_position(index, x, y) {
