@@ -2,9 +2,9 @@
 
 .const vic_bank = 3                     // last bank, under kernel and io
 .const bitmap_memory = 1                // upper half of bank
-.const screen_memory = 0                // beginning of bank
-.const min_sprite_memory = 16           // start after screen
-.const max_sprite_memory = 128          // after this comes the bitmap
+.const screen_memory = 7                // beginning of bank
+.const min_sprite_memory = 0            // start after screen
+.const max_sprite_memory = 112          // after this comes the bitmap
 
 .namespace sprite_images {
     .label hires_z = 1
