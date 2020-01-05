@@ -1,0 +1,12 @@
+[submodule "chipset"]
+	path = chipset
+	url = https://github.com/c64lib/chipset.git
+[submodule "common"]
+	path = common
+	url = https://github.com/c64lib/common
+[submodule "text"]
+	path = text
+	url = https://github.com/c64lib/text
+[submodule "copper64"]
+	path = copper64
+	url = https://github.com/c64lib/copper64
