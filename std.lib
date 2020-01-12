@@ -336,6 +336,17 @@
     .return $2000 * index + get_vic_bank(bank)
 }
 
+.macro @copy_color_ram(source) {
+    ldx #0
+!loop:
+    .for (var i=0; i < 4; i++) {
+        lda source + i * $100,x
+        sta COLOR_RAM + i * $100,x
+    }
+    inx
+    bne !loop-
+}
+
 .function @get_vic_bank(bank) {
     .assert "bank can be 0 - 3", bank >= 0 && bank <= 3, true
     .return $4000 * bank
@@ -361,4 +372,32 @@
 .macro @set_background_color(color) {
     lda #color
     sta bg_color
+}
+
+.macro @set_extra_background_color(color, idx) {
+    lda #color
+    .if (idx == 0) {
+        sta BG_COL_1
+    }
+    .if (idx == 1) {
+        sta BG_COL_2
+    }
+    .if (idx == 2) {
+        sta BG_COL_3
+    }
+}
+
+.macro @set_border_color(color) {
+    lda #color
+    sta border_color
+}
+
+.const OCP_TEMPLATE = "Bitmap=$0000, ScreenRam=$1f40, BorderColor=$2328, BackgroundColor=$2329, ColorRam=$2338"
+.function @LoadOCP(path) {
+    .return LoadBinary(path, OCP_TEMPLATE)
+}
+
+.const MULTIPAINT_TEMPLATE = "Bitmap=$0000, ScreenRam=$1f40, BorderColor=$2328, BackgroundColor=$2329, ColorRam=$2338"
+.function @LoadMultipaint(path) {
+    .return LoadBinary(path, MULTIPAINT_TEMPLATE)
 }

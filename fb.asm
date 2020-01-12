@@ -30,17 +30,26 @@ main:{
 setup:{
     // configureMemory(std.RAM_IO_KERNAL)
     hires_mode(1)
-    multicolor_mode(0)
+    multicolor_mode(1)
     set_vic_bank(vic_bank)
+
+    .var background_pic = LoadBinary("./fb.kla", BF_KOALA)
 
     set_screen_memory(screen_memory)
     .segment Screen
-    .import binary "bg.scr"
+    .fill background_pic.getScreenRamSize(), background_pic.getScreenRam(i)
     .segment Code
+
+    set_background_color(background_pic.getBackgroundColor())
 
     set_bitmap_memory(bitmap_memory)
     .segment Bitmap
-    .import binary "bg.map"
+    .fill background_pic.getBitmapSize(), background_pic.getBitmap(i)
+    .segment Code
+
+    copy_color_ram(background_color)
+    .segment Data
+background_color:.fill background_pic.getColorRamSize(), background_pic.getColorRam(i)
     .segment Code
 
     set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory)
@@ -71,6 +80,12 @@ setup:{
     set_sprite_position(0, 170, 200)
     enable_sprite(0, true)
     set_sprite_color(0, GREEN)
+
+    set_border_color(BLUE)
+    set_background_color(PURPLE)
+    set_extra_background_color(BLACK, 0)
+    set_extra_background_color(RED, 1)
+    set_extra_background_color(CYAN, 2)
 
     rts
 }
