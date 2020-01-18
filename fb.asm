@@ -87,16 +87,42 @@ setup_sprites:{
     set_sprite_multicolor(1, spritepad.sprites.get(ball_sprite).multicolor)
 
     // common colors
-    lda #WHITE
-    sta std.sprites.color1
     lda #BLACK
+    sta std.sprites.color1
+    lda #WHITE
     sta std.sprites.color2
 
     rts
 }
 
+handle_joystick:{
+    lda std.JOYSTICK_2
+    and #std.JOY_LEFT
+    bne !not+
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    beq !not+                           // cannot go left if already using sprite 0
+    sbc #1
+    sta get_sprite_pointer(vic_bank, screen_memory, 0)
+    jmp return
+!not:
+    lda std.JOYSTICK_2
+    and #std.JOY_RIGHT
+    bne !not+
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    tax
+    cmp #14
+    beq !not+                           // cannot go right if already using last sprite
+    txa
+    adc #1
+    sta get_sprite_pointer(vic_bank, screen_memory, 0)
+    jmp return
+!not:
+return:
+    rts
+}
+
 gameloop:{
-    nop
+    jsr handle_joystick
     nop
     jmp gameloop
     rts

@@ -41,6 +41,8 @@
 .label CIA2_CONTROL_B     = CIA2 + $0F
 
 /* Joystick flags */
+.label JOYSTICK_1       = CIA1 + $01
+.label JOYSTICK_2       = CIA1 + $00
 .label JOY_UP           = %00001
 .label JOY_DOWN         = %00010
 .label JOY_LEFT         = %00100
@@ -246,6 +248,10 @@
     .return $0400 * index + get_vic_bank(bank)
 }
 
+.function @get_sprite_pointer(bank, screen, index) {
+    .return get_screen_memory(bank, screen) + sprites.pointers + index
+}
+
 .macro @set_sprite_memory(vic_bank, screen_index, sprite_index, memory_index) {
     .assert "sprite 0 - 7", sprite_index >= 0 && sprite_index <= 7, true
     .assert "max 256 sprites per bank", memory_index >= 0 && memory_index <= 255, true
@@ -253,10 +259,7 @@
     .assert "memory must fit in 16k, because that's all the VIC2 can see", memory < $4000, true
     .assert "sprite cannot overlap screen", memory < get_screen_memory(vic_bank, screen_index) || memory > get_screen_memory(vic_bank, screen_index) + 1024, true
     lda #memory_index
-    .print "set sprite mem"
-    .print toHexString(memory_index)
-    .print toHexString(get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index)
-    sta get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index
+    sta get_sprite_pointer(vic_bank, screen_index, sprite_index)
 }
 
 .macro @enable_sprites(bitmap) {
