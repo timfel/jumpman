@@ -1,10 +1,10 @@
 #import "std.lib"
 
 .const vic_bank = 3                     // last bank, under kernel and io
-.const bitmap_memory = 1                // upper half of bank
-.const screen_memory = 7                // beginning of bank
-.const min_sprite_memory = 0            // start after screen
-.const max_sprite_memory = 112          // after this comes the bitmap
+.const bitmap_memory = 0                // lower half of bank
+.const screen_memory = (8192 / 1024)    // after bitmap
+.const min_sprite_memory = (8192 / 64) + (1024 / 64) // start after screen and bitmap
+.const max_sprite_memory = (pow(2, 14) / 64)
 
 .namespace sprite_images {
     .label hires_z = 1
@@ -27,7 +27,7 @@ main:{
     jsr highscore
 }
 
-setup:{
+setup_background:{
     // configureMemory(std.RAM_IO_KERNAL)
     hires_mode(1)
     multicolor_mode(1)
@@ -52,40 +52,45 @@ setup:{
 background_color:.fill background_pic.getColorRamSize(), background_pic.getColorRam(i)
     .segment Code
 
-    set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory)
-    .segment Sprites
-    *=get_sprite_memory(vic_bank, min_sprite_memory)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000111111111100000)
-    :sprite_row(%000000000000000011000000)
-    :sprite_row(%000000000000000110000000)
-    :sprite_row(%000000000000001100000000)
-    :sprite_row(%000000000000011000000000)
-    :sprite_row(%000000000000110000000000)
-    :sprite_row(%000000000001100000000000)
-    :sprite_row(%000000000011000000000000)
-    :sprite_row(%000000000111111111100000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    :sprite_row(%000000000000000000000000)
-    .segment Code
-    set_sprite_position(0, 170, 200)
-    enable_sprite(0, true)
-    set_sprite_color(0, GREEN)
+    rts
+}
 
-    set_border_color(BLUE)
-    set_background_color(PURPLE)
-    set_extra_background_color(BLACK, 0)
-    set_extra_background_color(RED, 1)
-    set_extra_background_color(CYAN, 2)
+setup:{
+    jsr setup_background
+    jsr setup_sprites
+    rts
+}
+
+setup_sprites:{
+    .var spritepad = LoadSpritepad("sprites.raw")
+    .segment Sprites
+    .for (var j = 0; j < spritepad.sprites.size(); j++) {
+        *=get_sprite_memory(vic_bank, min_sprite_memory + j)
+        .fill 64, spritepad.sprites.get(j).raw_bytes.get(i)
+    }
+    .segment Code
+
+    // cannon sprite
+    set_sprite_position(0, $af, $cd)
+    enable_sprite(0, true)
+    .const middle_cannon = 7
+    set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory + middle_cannon)
+    set_sprite_color(0, spritepad.sprites.get(middle_cannon).color)
+    set_sprite_multicolor(0, spritepad.sprites.get(middle_cannon).multicolor)
+
+    // ball sprite
+    set_sprite_position(1, $af, $e8)
+    enable_sprite(1, true)
+    .const ball_sprite = 15
+    set_sprite_memory(vic_bank, screen_memory, 1, min_sprite_memory + ball_sprite)
+    set_sprite_color(1, spritepad.sprites.get(ball_sprite).color)
+    set_sprite_multicolor(1, spritepad.sprites.get(ball_sprite).multicolor)
+
+    // common colors
+    lda #WHITE
+    sta std.sprites.color1
+    lda #BLACK
+    sta std.sprites.color2
 
     rts
 }

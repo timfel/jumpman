@@ -253,6 +253,7 @@
     .assert "memory must fit in 16k, because that's all the VIC2 can see", memory < $4000, true
     .assert "sprite cannot overlap screen", memory < get_screen_memory(vic_bank, screen_index) || memory > get_screen_memory(vic_bank, screen_index) + 1024, true
     lda #memory_index
+    .print "set sprite mem"
     .print toHexString(memory_index)
     .print toHexString(get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index)
     sta get_screen_memory(vic_bank, screen_index) + sprites.pointers + sprite_index
@@ -289,6 +290,17 @@
 .macro @set_sprite_color(index, color) {
     lda #color
     sta sprites.colors + index
+}
+
+.macro @set_sprite_multicolor(index, flag) {
+    .assert "sprite 0 - 7", index >= 0 && index <= 7, true
+    lda sprites.multicolor_bits
+    .if (flag) {
+        ora #[1 << index]
+    } else {
+        and #[1 << index] ^ $ff
+    }
+    sta sprites.multicolor_bits
 }
 
 .macro @set_sprite_x(index, x) {
@@ -400,4 +412,36 @@
 .const MULTIPAINT_TEMPLATE = "Bitmap=$0000, ScreenRam=$1f40, BorderColor=$2328, BackgroundColor=$2329, ColorRam=$2338"
 .function @LoadMultipaint(path) {
     .return LoadBinary(path, MULTIPAINT_TEMPLATE)
+}
+
+.struct SpritepadFile {
+    sprites
+}
+
+.struct Sprite {
+    raw_bytes,
+    multicolor,
+    is_overlay,
+    color
+}
+
+.function parse_sprite(bytes, sprite_index) {
+    .var raw_bytes = List()
+    .for (var i = 0; i < 64; i++) {
+        .eval raw_bytes.add(bytes.get(64 * sprite_index + i))
+    }
+    .var attributes = raw_bytes.get(raw_bytes.size() - 1)
+    .var multicolor_mode = [attributes & %10000000] == %10000000
+    .var overlay = [attributes & 00010000] == %00010000
+    .var color = attributes & %00001111
+    .return Sprite(raw_bytes, multicolor_mode, overlay, color)
+}
+
+.function @LoadSpritepad(file) {
+    .var bytes = LoadBinary(file)
+    .var result = SpritepadFile(List())
+    .for (var i = 0; i < bytes.getSize() / 64; i++) {
+        .eval result.sprites.add(parse_sprite(bytes, i))
+    }
+    .return result
 }
