@@ -21,10 +21,10 @@
 .segment Code
 BasicUpstart2(main)
 
-.segment Data                           // globals
 .const middle_cannon = 7
-cannon_angle:.byte middle_cannon        // 0 - 14
-.segment Code
+.const max_ball_x = $ea
+.const min_ball_x = $72
+.const min_ball_y = 4 + std.TOP_SCREEN_RASTER_POS
 
 main:{
     jsr setup
@@ -75,10 +75,55 @@ handle_joystick:{
     lda delay
     sbc #1
     sta delay
-    bne return_from_irq
-
-    // handle
+    beq go_on
+    jmp return_from_irq
+go_on:
     configureMemory(std.RAM_IO_RAM)
+
+    // when the ball is flying, we don't handle input
+    lda ball_is_flying
+    beq handle_input
+    get_sprite_x(1)
+    clc
+    adc ball_speed_x
+    set_sprite_x_from_a(1)
+    bcc positive_x
+    // we had an overflow, so we're really subtracting X position
+    sec
+    sbc #min_ball_x
+    bcs move_ball_y                     // we didn't go left of the border
+    lda #min_ball_x                     // stick to the border
+    set_sprite_x_from_a(1)
+    jmp invert_ball_x
+positive_x:
+    sec
+    sbc #max_ball_x
+    bcc move_ball_y                     // if we didn't go right of the border
+    lda #max_ball_x
+    set_sprite_x_from_a(1)
+invert_ball_x:
+    lda ball_speed_x
+    eor #$ff
+    clc
+    adc #1
+    sta ball_speed_x
+
+move_ball_y:
+    get_sprite_y(1)
+    sec
+    sbc ball_speed_y
+    set_sprite_y_from_a(1)
+    sec
+    sbc #min_ball_y
+    bcs return                          // y still larger than min
+stick_ball:
+    lda #min_ball_y
+    set_sprite_y_from_a(1)
+    lda #0
+    sta ball_is_flying                  // stop flying, we now stick
+    jmp return
+
+handle_input:
     ldx std.JOYSTICK_2
 
     txa
@@ -105,12 +150,38 @@ handle_joystick:{
     jmp return
 !not:
 
+    txa
+    and #std.JOY_FIRE
+    bne !not+
+    lda #1
+    sta ball_is_flying
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    sec
+    sbc #[min_sprite_memory + middle_cannon]
+    sta ball_speed_x
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    sec
+    sbc #[min_sprite_memory + middle_cannon]
+    bcc already_negative
+    // make absolute
+    eor #$ff
+    clc
+    adc #1
+already_negative:
+    adc #8
+    sta ball_speed_y
+    jmp return
+!not:
+
 return:
     configureMemory(std.RAM_IO_KERNAL)
 return_from_irq:
     jmp std.IRQ_DEFAULT_HANDLER
 
 delay:.byte 0
+ball_is_flying:.byte 0
+ball_speed_x:.byte 0
+ball_speed_y:.byte 0
 }
 
 setup:{

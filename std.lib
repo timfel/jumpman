@@ -308,13 +308,29 @@
     sta sprites.multicolor_bits
 }
 
+.macro @set_sprite_x_from_a(index) {
+    sta sprites.positions + 2 * index
+
+}
 .macro @set_sprite_x(index, x) {
     lda #x
     sta sprites.positions + 2 * index
 }
 
+.macro @get_sprite_x(index) {
+    lda sprites.positions + 2 * index
+}
+
+.macro @get_sprite_y(index) {
+    lda sprites.positions + 2 * index + 1
+}
+
 .macro @set_sprite_y(index, y) {
     lda #y
+    sta sprites.positions + 2 * index + 1
+}
+
+.macro @set_sprite_y_from_a(index) {
     sta sprites.positions + 2 * index + 1
 }
 
