@@ -123,16 +123,12 @@ bitshift:
     lda std.sprites.positions + 1 + 2 * 1 // transfer ball Y position
     sta std.sprites.positions + 1,x
     // set the bit so this sprite is used now
-    txa; lsr; tax
-    lda #1
-
     ldx lineIdx:#00
     lda lines,x
     ora bitPattern:#00
     sta lines,x
-
-reset_ball_sprite:
-    set_sprite_position(1, start_ball_x, start_ball_y)
+    // reset ball
+    jsr reset_ball_sprite
 
     rts
 lines:.fill 7,0
@@ -147,6 +143,8 @@ handle_joystick:{
     beq go_on
     jmp return
 go_on:
+    lda #5
+    sta delay
     // when the ball is flying, we don't handle input
     lda ball_is_flying
     beq handle_input
@@ -263,6 +261,16 @@ setup:{
     rts
 }
 
+
+reset_ball_sprite:{
+    set_sprite_position(1, start_ball_x, start_ball_y)
+    lda std.RASTER
+    and #%11
+    adc #2
+    sta std.sprites.colors + 1
+    rts
+}
+
 setup_sprites:{
     .var spritepad = LoadSpritepad("sprites.raw")
     .segment Sprites
@@ -283,10 +291,13 @@ setup_sprites:{
     set_sprite_position(1, start_ball_x, start_ball_y)
     enable_sprite(1, true)
     set_sprite_memory(vic_bank, screen_memory, 1, min_sprite_memory + ball_sprite)
-    set_sprite_color(1, spritepad.sprites.get(ball_sprite).color)
+    jsr reset_ball_sprite
     set_sprite_multicolor(1, spritepad.sprites.get(ball_sprite).multicolor)
 
+    // enable all the other sprites
     enable_sprites($ff)
+    lda #%11111110
+    sta std.sprites.multicolor_bits
 
     // common colors
     lda #BLACK
