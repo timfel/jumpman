@@ -22,9 +22,21 @@
 BasicUpstart2(main)
 
 .const middle_cannon = 7
+.const ball_sprite = 15
 .const max_ball_x = $ea
 .const min_ball_x = $72
 .const min_ball_y = 4 + std.TOP_SCREEN_RASTER_POS
+.const start_ball_x = $af
+.const start_ball_y = $e8
+
+.segment Data
+ball_grid:
+.for (var x = 0; x < 5; x++) {
+    .for (var y = 0; y < 7; y++) {
+        .byte 0
+    }
+}
+.segment Code
 
 main:{
     jsr setup
@@ -70,16 +82,71 @@ setup_irq:{
     rts
 }
 
+stick_ball_to_background:{
+    get_sprite_y(1)
+    // determine free sprite for this y line
+    sbc min_ball_y
+    ldx #255
+division_loop:
+    inx
+    sbc #std.SPRITE_HEIGHT
+    bcc division_loop
+    // now X holds the line (aka (y position - min_ball_y) / SPRITE_HEIGHT)
+    stx lineIdx
+    lda lines,x
+    tay
+    .for (var i = 2; i < 8; i++) {
+        // sprite 1 is ball and 0 is cannon, so we only use 2-7
+        ldx #i
+        tya
+        and #[1 << i]
+        beq sprite_found
+    }
+    // now X holds the sprite number we can use
+sprite_found:
+    txa; tay
+    lda #1
+bitshift:
+    // bitshift a '1' X-times left (X is still the sprite index, we use Y to dec)
+    asl
+    dey
+    bne bitshift
+    sta bitPattern
+    // transfer things
+    lda std.sprites.colors + 1          // Transfer ball color
+    sta std.sprites.colors,x
+    lda #[min_sprite_memory + ball_sprite] // transfer ball
+    sta get_screen_memory(vic_bank, screen_memory) + std.sprites.pointers,x
+    txa; asl; tax                       // multiply index by 2
+    lda std.sprites.positions + 2 * 1   // transfer ball X position
+    sta std.sprites.positions,x
+    lda std.sprites.positions + 1 + 2 * 1 // transfer ball Y position
+    sta std.sprites.positions + 1,x
+    // set the bit so this sprite is used now
+    txa; lsr; tax
+    lda #1
+
+    ldx lineIdx:#00
+    lda lines,x
+    ora bitPattern:#00
+    sta lines,x
+
+reset_ball_sprite:
+    set_sprite_position(1, start_ball_x, start_ball_y)
+
+    rts
+lines:.fill 7,0
+colors:.fill 7,0
+posx:.fill 7,0
+}
+
 handle_joystick:{
     // should we trigger?
     lda delay
-    sbc #1
-    sta delay
+    dec delay
     beq go_on
-    jmp return_from_irq
+    jmp return
 go_on:
-    configureMemory(std.RAM_IO_RAM)
-
     // when the ball is flying, we don't handle input
     lda ball_is_flying
     beq handle_input
@@ -88,17 +155,20 @@ go_on:
     adc ball_speed_x
     set_sprite_x_from_a(1)
     bcc positive_x
-    // we had an overflow, so we're really subtracting X position
+    // we had an overflow, so we're moving left
     sec
     sbc #min_ball_x
-    bcs move_ball_y                     // we didn't go left of the border
-    lda #min_ball_x                     // stick to the border
+    bcs move_ball_y
+    // we went left of the border
+    lda #min_ball_x
     set_sprite_x_from_a(1)
     jmp invert_ball_x
 positive_x:
+    // we're moving right
     sec
     sbc #max_ball_x
-    bcc move_ball_y                     // if we didn't go right of the border
+    bcc move_ball_y
+    // we went right of the border
     lda #max_ball_x
     set_sprite_x_from_a(1)
 invert_ball_x:
@@ -121,10 +191,12 @@ stick_ball:
     set_sprite_y_from_a(1)
     lda #0
     sta ball_is_flying                  // stop flying, we now stick
+    jsr stick_ball_to_background
     jmp return
 
 handle_input:
     ldx std.JOYSTICK_2
+    configureMemory(std.RAM_IO_RAM)
 
     txa
     and #std.JOY_LEFT
@@ -135,7 +207,7 @@ handle_input:
     lda get_sprite_pointer(vic_bank, screen_memory, 0)
     sbc #1
     sta get_sprite_pointer(vic_bank, screen_memory, 0)
-    jmp return
+    jmp end_input_handling
 !not:
 
     txa
@@ -147,7 +219,7 @@ handle_input:
     lda get_sprite_pointer(vic_bank, screen_memory, 0)
     adc #1
     sta get_sprite_pointer(vic_bank, screen_memory, 0)
-    jmp return
+    jmp end_input_handling
 !not:
 
     txa
@@ -170,12 +242,12 @@ handle_input:
 already_negative:
     adc #8
     sta ball_speed_y
-    jmp return
+    jmp end_input_handling
 !not:
 
-return:
+end_input_handling:
     configureMemory(std.RAM_IO_KERNAL)
-return_from_irq:
+return:
     jmp std.IRQ_DEFAULT_HANDLER
 
 delay:.byte 0
@@ -208,12 +280,13 @@ setup_sprites:{
     set_sprite_multicolor(0, spritepad.sprites.get(middle_cannon).multicolor)
 
     // ball sprite
-    set_sprite_position(1, $af, $e8)
+    set_sprite_position(1, start_ball_x, start_ball_y)
     enable_sprite(1, true)
-    .const ball_sprite = 15
     set_sprite_memory(vic_bank, screen_memory, 1, min_sprite_memory + ball_sprite)
     set_sprite_color(1, spritepad.sprites.get(ball_sprite).color)
     set_sprite_multicolor(1, spritepad.sprites.get(ball_sprite).multicolor)
+
+    enable_sprites($ff)
 
     // common colors
     lda #BLACK

@@ -160,6 +160,8 @@
  * Misc. constants
  */
 .label TEXT_SCREEN_WIDTH = 40
+.label SPRITE_WIDTH = 24
+.label SPRITE_HEIGHT = 21
 
 /*
  * MOS6510 Registers.
