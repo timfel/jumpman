@@ -188,6 +188,8 @@
 .label RAM_IO_KERNAL            = PLA_CHAREN | PLA_HIRAM
 .label BASIC_IO_KERNAL          = PLA_CHAREN | PLA_LORAM | PLA_HIRAM
 
+.label IRQ_HANDLER_ADDRESS = $0314
+.label IRQ_DEFAULT_HANDLER = $ea31
 
 .label color_ram = $d800
 .label border_color = $d020

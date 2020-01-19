@@ -21,6 +21,11 @@
 .segment Code
 BasicUpstart2(main)
 
+.segment Data                           // globals
+.const middle_cannon = 7
+cannon_angle:.byte middle_cannon        // 0 - 14
+.segment Code
+
 main:{
     jsr setup
     jsr gameloop
@@ -55,7 +60,61 @@ background_color:.fill background_pic.getColorRamSize(), background_pic.getColor
     rts
 }
 
+setup_irq:{
+    sei
+    ldx #<handle_joystick
+    ldy #>handle_joystick
+    stx std.IRQ_HANDLER_ADDRESS
+    sty std.IRQ_HANDLER_ADDRESS + 1
+    cli
+    rts
+}
+
+handle_joystick:{
+    // should we trigger?
+    lda delay
+    sbc #1
+    sta delay
+    bne return_from_irq
+
+    // handle
+    configureMemory(std.RAM_IO_RAM)
+    ldx std.JOYSTICK_2
+
+    txa
+    and #std.JOY_LEFT
+    bne !not+
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    cmp #[min_sprite_memory + 0]
+    beq !not+                           // cannot go left if already using sprite 0
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    sbc #1
+    sta get_sprite_pointer(vic_bank, screen_memory, 0)
+    jmp return
+!not:
+
+    txa
+    and #std.JOY_RIGHT
+    bne !not+
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    cmp #[min_sprite_memory + 14]
+    beq !not+                           // cannot go right if already using last sprite
+    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    adc #1
+    sta get_sprite_pointer(vic_bank, screen_memory, 0)
+    jmp return
+!not:
+
+return:
+    configureMemory(std.RAM_IO_KERNAL)
+return_from_irq:
+    jmp std.IRQ_DEFAULT_HANDLER
+
+delay:.byte 0
+}
+
 setup:{
+    jsr setup_irq
     jsr setup_background
     jsr setup_sprites
     rts
@@ -73,7 +132,6 @@ setup_sprites:{
     // cannon sprite
     set_sprite_position(0, $af, $cd)
     enable_sprite(0, true)
-    .const middle_cannon = 7
     set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory + middle_cannon)
     set_sprite_color(0, spritepad.sprites.get(middle_cannon).color)
     set_sprite_multicolor(0, spritepad.sprites.get(middle_cannon).multicolor)
@@ -95,34 +153,7 @@ setup_sprites:{
     rts
 }
 
-handle_joystick:{
-    lda std.JOYSTICK_2
-    and #std.JOY_LEFT
-    bne !not+
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
-    beq !not+                           // cannot go left if already using sprite 0
-    sbc #1
-    sta get_sprite_pointer(vic_bank, screen_memory, 0)
-    jmp return
-!not:
-    lda std.JOYSTICK_2
-    and #std.JOY_RIGHT
-    bne !not+
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
-    tax
-    cmp #14
-    beq !not+                           // cannot go right if already using last sprite
-    txa
-    adc #1
-    sta get_sprite_pointer(vic_bank, screen_memory, 0)
-    jmp return
-!not:
-return:
-    rts
-}
-
 gameloop:{
-    jsr handle_joystick
     nop
     jmp gameloop
     rts
