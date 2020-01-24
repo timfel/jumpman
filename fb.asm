@@ -87,10 +87,10 @@ stick_ball_to_background:{
     // determine free sprite for this y line
     sbc min_ball_y
     ldx #255
-division_loop:
+!division_loop:
     inx
     sbc #std.SPRITE_HEIGHT
-    bcc division_loop
+    bcc !division_loop-
     // now X holds the line (aka (y position - min_ball_y) / SPRITE_HEIGHT)
     stx lineIdx
     lda lines,x
@@ -117,11 +117,30 @@ bitshift:
     sta std.sprites.colors,x
     lda #[min_sprite_memory + ball_sprite] // transfer ball
     sta get_screen_memory(vic_bank, screen_memory) + std.sprites.pointers,x
-    txa; asl; tax                       // multiply index by 2
-    lda std.sprites.positions + 2 * 1   // transfer ball X position
+
+    txa; asl                            // multiply index by 2 to get position offset
+
+    sta positionOffset
+    lda std.sprites.positions + 2 * 1   // find column for last x position
+    clc
+    sbc #min_ball_x
+    ldx #0
+    clc
+!division_loop:
+    inx
+    sbc #std.SPRITE_WIDTH
+    bcs !division_loop-
+    // now X holds the column + 1
+    lda column_offsets,x                // load pixel offset for this column
+    ldx positionOffset:#00
     sta std.sprites.positions,x
-    lda std.sprites.positions + 1 + 2 * 1 // transfer ball Y position
+
+    stx positionOffsetA
+    ldx lineIdx
+    lda row_offsets,x                   // load pixel offset for this row
+    ldx positionOffsetA:#00
     sta std.sprites.positions + 1,x
+
     // set the bit so this sprite is used now
     ldx lineIdx:#00
     lda lines,x
@@ -134,6 +153,15 @@ bitshift:
 lines:.fill 7,0
 colors:.fill 7,0
 posx:.fill 7,0
+column_offsets:
+    .byte 0
+    .for(var x = 0; x < 5; x++) {
+        .byte (x * 24) + min_ball_x
+    }
+row_offsets:
+    .for(var y = 0; y < 7; y++) {
+        .byte (y * 21) + min_ball_y
+    }
 }
 
 handle_joystick:{
@@ -221,7 +249,7 @@ handle_input:
 !not:
 
     txa
-    and #std.JOY_FIRE
+    and #std.JOY_UP
     bne !not+
     lda #1
     sta ball_is_flying
