@@ -21,21 +21,60 @@
 .segment Code
 BasicUpstart2(main)
 
-.const middle_cannon = 7
-.const ball_sprite = 15
-.const max_ball_x = $ea
-.const min_ball_x = $72
-.const min_ball_y = 4 + std.TOP_SCREEN_RASTER_POS
-.const start_ball_x = $af
-.const start_ball_y = $e8
+.const spritepad = LoadSpritepad("sprites.raw")
 
-.segment Data
-ball_grid:
-.for (var x = 0; x < 5; x++) {
-    .for (var y = 0; y < 7; y++) {
-        .byte 0
+.namespace cannon {
+    .label sprite_index = 1
+    .label min_sprite = min_sprite_memory + 0
+    .label middle_sprite = min_sprite_memory + 7
+    .label max_sprite = min_sprite_memory + 14
+    .label current_sprite = cannon_sprite
+    .namespace x {
+        .label start = $af
+    }
+    .namespace y {
+        .label start = $cd
     }
 }
+
+.namespace ball {
+    .label is_flying = ball_is_flying
+    .label sprite_index = 0
+    .label sprite = min_sprite_memory + 25
+    .namespace x {
+        .label min = $72
+        .label max = $ea
+        .label start = $b3
+        .label speed = ball_speed_x
+    }
+    .namespace y {
+        .label min = 4 + std.TOP_SCREEN_RASTER_POS
+        .label start = $ea
+        .label speed = ball_speed_y
+    }
+    .label width = 16
+    .label height = std.SPRITE_HEIGHT
+    .label color = ball_start_color
+}
+
+.namespace playfield {
+    .label width = ball.x.max - ball.x.min
+    .label columns = playfield.width / ball.width
+    .assert columns < 8, true, "cannot do more than 8 columns"
+    .label rows = 7
+}
+
+.segment Data
+ball_grid:.for (var x = 0; x < playfield.columns; x++) {
+              .for (var y = 0; y < playfield.rows; y++) {
+                  .byte [$f << 4] | GREEN
+              }
+          }
+cannon_sprite:.word cannon.middle_sprite
+ball_start_color:.byte GREEN
+ball_is_flying:.byte 0
+ball_speed_x:.byte 0
+ball_speed_y:.byte 0
 .segment Code
 
 main:{
@@ -72,37 +111,32 @@ background_color:.fill background_pic.getColorRamSize(), background_pic.getColor
     rts
 }
 
-setup_irq:{
-    sei
-    ldx #<handle_joystick
-    ldy #>handle_joystick
-    stx std.IRQ_HANDLER_ADDRESS
-    sty std.IRQ_HANDLER_ADDRESS + 1
-    cli
-    rts
+.macro raster_wait(line_number) {
+!wait:
+    lda #line_number
+    cmp std.RASTER
+    bne !wait-
+    bit std.CONTROL_1
+    .if (line_number <= 255) {
+        bmi !wait-
+    } else {
+        bpl !wait-
+    }
 }
 
 stick_ball_to_background:{
-    get_sprite_y(1)
-    // determine free sprite for this y line
-    sbc min_ball_y
-    ldx #255
-!division_loop:
-    inx
-    sbc #std.SPRITE_HEIGHT
-    bcc !division_loop-
-    // now X holds the line (aka (y position - min_ball_y) / SPRITE_HEIGHT)
-    stx lineIdx
-    lda lines,x
-    tay
-    .for (var i = 2; i < 8; i++) {
-        // sprite 1 is ball and 0 is cannon, so we only use 2-7
-        ldx #i
-        tya
-        and #[1 << i]
-        beq sprite_found
-    }
-    // now X holds the sprite number we can use
+    // get_sprite_y(1)
+    // // determine column sprite for this y line
+    // sbc ball.y.min
+
+    // lsr; lsr; lsr; lsr                  // divide by 16
+    // // now A holds the row
+
+    get_sprite_x(ball.sprite_index)
+    sbc #ball.x.min
+    lsr; lsr; lsr; lsr                  // divide by 16 == ball.width
+    // now A holds the column, and thus which sprite to use
+
 sprite_found:
     txa; tay
     lda #1
@@ -113,9 +147,9 @@ bitshift:
     bne bitshift
     sta bitPattern
     // transfer things
-    lda std.sprites.colors + 1          // Transfer ball color
+    lda std.sprites.colors + ball.sprite_index // Transfer ball color
     sta std.sprites.colors,x
-    lda #[min_sprite_memory + ball_sprite] // transfer ball
+    lda #ball.sprite                    // transfer ball
     sta get_screen_memory(vic_bank, screen_memory) + std.sprites.pointers,x
 
     txa; asl                            // multiply index by 2 to get position offset
@@ -123,7 +157,7 @@ bitshift:
     sta positionOffset
     lda std.sprites.positions + 2 * 1   // find column for last x position
     clc
-    sbc #min_ball_x
+    sbc #ball.x.min
     ldx #0
     clc
 !division_loop:
@@ -156,110 +190,112 @@ posx:.fill 7,0
 column_offsets:
     .byte 0
     .for(var x = 0; x < 5; x++) {
-        .byte (x * 24) + min_ball_x
+        .byte (x * 24) + ball.x.min
     }
 row_offsets:
     .for(var y = 0; y < 7; y++) {
-        .byte (y * 21) + min_ball_y
+        .byte (y * 21) + ball.y.min
     }
+}
+
+handle_flying_ball:{
+    get_sprite_x(ball.sprite_index)
+    clc
+    adc ball.x.speed
+    set_sprite_x_from_a(ball.sprite_index)
+    bcc positive_x
+    // we had an overflow, so we're moving left
+    sec
+    sbc #ball.x.min
+    bcs move_ball_y
+    // we went left of the border
+    lda #ball.x.min
+    set_sprite_x_from_a(ball.sprite_index)
+    jmp invert_ball_x
+positive_x:
+    // we're moving right
+    sec
+    sbc #ball.x.max
+    bcc move_ball_y
+    // we went right of the border
+    lda #ball.x.max
+    set_sprite_x_from_a(ball.sprite_index)
+invert_ball_x:
+    lda ball.x.speed
+    eor #$ff
+    clc
+    adc #1
+    sta ball.x.speed
+
+move_ball_y:
+    get_sprite_y(ball.sprite_index)
+    sec
+    sbc ball.y.speed
+    set_sprite_y_from_a(ball.sprite_index)
+    sec
+    sbc #ball.y.min
+    bcs return                          // y still larger than min
+stick_ball:
+    lda #ball.y.min
+    set_sprite_y_from_a(ball.sprite_index)
+    lda #0
+    sta ball.is_flying                  // stop flying, we now stick
+    jsr stick_ball_to_background
+return:
+    rts
 }
 
 handle_joystick:{
     // should we trigger?
     lda delay
     dec delay
-    beq go_on
-    jmp return
-go_on:
+    bne return
     lda #5
     sta delay
     // when the ball is flying, we don't handle input
-    lda ball_is_flying
+    lda ball.is_flying
     beq handle_input
-    get_sprite_x(1)
-    clc
-    adc ball_speed_x
-    set_sprite_x_from_a(1)
-    bcc positive_x
-    // we had an overflow, so we're moving left
-    sec
-    sbc #min_ball_x
-    bcs move_ball_y
-    // we went left of the border
-    lda #min_ball_x
-    set_sprite_x_from_a(1)
-    jmp invert_ball_x
-positive_x:
-    // we're moving right
-    sec
-    sbc #max_ball_x
-    bcc move_ball_y
-    // we went right of the border
-    lda #max_ball_x
-    set_sprite_x_from_a(1)
-invert_ball_x:
-    lda ball_speed_x
-    eor #$ff
-    clc
-    adc #1
-    sta ball_speed_x
-
-move_ball_y:
-    get_sprite_y(1)
-    sec
-    sbc ball_speed_y
-    set_sprite_y_from_a(1)
-    sec
-    sbc #min_ball_y
-    bcs return                          // y still larger than min
-stick_ball:
-    lda #min_ball_y
-    set_sprite_y_from_a(1)
-    lda #0
-    sta ball_is_flying                  // stop flying, we now stick
-    jsr stick_ball_to_background
     jmp return
 
 handle_input:
     ldx std.JOYSTICK_2
-    configureMemory(std.RAM_IO_RAM)
 
     txa
     and #std.JOY_LEFT
     bne !not+
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
-    cmp #[min_sprite_memory + 0]
-    beq !not+                           // cannot go left if already using sprite 0
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    lda cannon.current_sprite
+    cmp #cannon.min_sprite
+    beq return                          // cannot go left if already using sprite 0
+    lda cannon.current_sprite
     sbc #1
-    sta get_sprite_pointer(vic_bank, screen_memory, 0)
-    jmp end_input_handling
+    sta cannon.current_sprite
+    jmp return
 !not:
 
     txa
     and #std.JOY_RIGHT
     bne !not+
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
-    cmp #[min_sprite_memory + 14]
-    beq !not+                           // cannot go right if already using last sprite
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    lda cannon.current_sprite
+    cmp #cannon.max_sprite
+    beq return                          // cannot go right if already using last sprite
+    lda cannon.current_sprite
     adc #1
-    sta get_sprite_pointer(vic_bank, screen_memory, 0)
-    jmp end_input_handling
+    sta cannon.current_sprite
+    jmp return
 !not:
 
     txa
     and #std.JOY_UP
     bne !not+
     lda #1
-    sta ball_is_flying
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    sta ball.is_flying
+    lda cannon.current_sprite
     sec
-    sbc #[min_sprite_memory + middle_cannon]
-    sta ball_speed_x
-    lda get_sprite_pointer(vic_bank, screen_memory, 0)
+    sbc #cannon.middle_sprite
+    sta ball.x.speed
+    lda cannon.current_sprite
     sec
-    sbc #[min_sprite_memory + middle_cannon]
+    sbc #cannon.middle_sprite
     bcc already_negative
     // make absolute
     eor #$ff
@@ -267,65 +303,45 @@ handle_input:
     adc #1
 already_negative:
     adc #8
-    sta ball_speed_y
-    jmp end_input_handling
+    sta ball.y.speed
+    jmp return
 !not:
 
-end_input_handling:
-    configureMemory(std.RAM_IO_KERNAL)
 return:
-    jmp std.IRQ_DEFAULT_HANDLER
+    rts
 
 delay:.byte 0
-ball_is_flying:.byte 0
-ball_speed_x:.byte 0
-ball_speed_y:.byte 0
 }
 
 setup:{
-    jsr setup_irq
+    jsr setup_sid
     jsr setup_background
     jsr setup_sprites
+    jsr reset_ball_sprite
     rts
 }
 
-
 reset_ball_sprite:{
-    set_sprite_position(1, start_ball_x, start_ball_y)
-    lda std.RASTER
+    enable_sprite(ball.sprite_index, true)
+    set_sprite_position(ball.sprite_index, ball.x.start, ball.y.start)
+    set_sprite_memory(vic_bank, screen_memory, ball.sprite_index, ball.sprite)
+    set_sprite_multicolor(ball.sprite_index, true)
+
+    lda $D41B
     and #%11
     adc #2
-    sta std.sprites.colors + 1
+    sta std.sprites.colors + ball.sprite_index
+
     rts
 }
 
 setup_sprites:{
-    .var spritepad = LoadSpritepad("sprites.raw")
     .segment Sprites
     .for (var j = 0; j < spritepad.sprites.size(); j++) {
         *=get_sprite_memory(vic_bank, min_sprite_memory + j)
         .fill 64, spritepad.sprites.get(j).raw_bytes.get(i)
     }
     .segment Code
-
-    // cannon sprite
-    set_sprite_position(0, $af, $cd)
-    enable_sprite(0, true)
-    set_sprite_memory(vic_bank, screen_memory, 0, min_sprite_memory + middle_cannon)
-    set_sprite_color(0, spritepad.sprites.get(middle_cannon).color)
-    set_sprite_multicolor(0, spritepad.sprites.get(middle_cannon).multicolor)
-
-    // ball sprite
-    set_sprite_position(1, start_ball_x, start_ball_y)
-    enable_sprite(1, true)
-    set_sprite_memory(vic_bank, screen_memory, 1, min_sprite_memory + ball_sprite)
-    jsr reset_ball_sprite
-    set_sprite_multicolor(1, spritepad.sprites.get(ball_sprite).multicolor)
-
-    // enable all the other sprites
-    enable_sprites($ff)
-    lda #%11111110
-    sta std.sprites.multicolor_bits
 
     // common colors
     lda #BLACK
@@ -336,8 +352,74 @@ setup_sprites:{
     rts
 }
 
+setup_sid:{
+    // some random numbers in lda $D41B
+    lda #$FF                            // maximum frequency value
+    sta $D40E                           // voice 3 frequency low byte
+    sta $D40F                           // voice 3 frequency high byte
+    lda #$80                            // noise waveform, gate bit off
+    sta $D412                           // voice 3 control register
+}
+
+show_cannon:{
+    enable_sprite(cannon.sprite_index, true)
+    set_sprite_position(cannon.sprite_index, cannon.x.start, cannon.y.start)
+    set_sprite_multicolor(cannon.sprite_index, false)
+    set_sprite_color(cannon.sprite_index, BROWN)
+    lda cannon.current_sprite
+    sta get_sprite_pointer(vic_bank, screen_memory, cannon.sprite_index)
+    rts
+}
+
+show_score:{
+    rts
+}
+
+set_ball_colors_and_visibility_in_row_X_with_y_position_Y:{
+    .for(var i = ball.sprite_index + 1; i < 8; i++) {
+        // x is row * 8, so this is really balls[column + (row * 8)]
+        lda [ball_grid + i],x
+        // the byte holds the color information in the lower half, so just store it
+        sta std.sprites.colors + i
+        // is it visible?
+        and #%10000000
+        beq disable
+        enable_sprite(i, true)
+        // set Y position
+        sty std.sprites.positions + 2 * i + 1
+        jmp continue
+disable:
+        enable_sprite(i, false)
+continue:
+    }
+    rts
+}
+
+set_all_sprites_to_invisible_multicolor_balls_in_columns:{
+    lda #%11111111
+    sta std.sprites.multicolor_bits
+    .for(var i = ball.sprite_index + 1; i < 8; i++) {
+        set_sprite_memory(vic_bank, screen_memory, i, ball.sprite)
+        set_sprite_x(i, ball.x.min + i * ball.width)
+    }
+    enable_sprites(0)
+    enable_sprite(ball.sprite_index, true)
+    rts
+}
+
 gameloop:{
-    nop
+    .for(var row = 0; row < playfield.rows; row++) {
+        raster_wait(ball.y.min + row * ball.height - ball.height / 2)
+        ldx #[row * 8]
+        ldy #[ball.y.min + row * ball.height]
+        jsr set_ball_colors_and_visibility_in_row_X_with_y_position_Y
+    }
+    raster_wait(cannon.y.start - 2)
+    jsr show_cannon
+    jsr show_score
+    raster_wait(ball.y.start + 1)
+    jsr set_all_sprites_to_invisible_multicolor_balls_in_columns
+    jsr handle_joystick
     jmp gameloop
     rts
 }
